@@ -1,6 +1,7 @@
 // frontend/src/contract.js
 import { ethers } from "ethers";
-import abi from "./abi/MyContract.json";
+import abi from "./abi/TokenVesting.json";
+import abi from "./abi/MyToken.json";
 import { CONTRACT_ADDRESS } from "./config";
 
 export async function getContract() {
