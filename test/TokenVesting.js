@@ -64,6 +64,23 @@ describe("TokenVesting", function () {
         );
     });
 
+    it("reverts funding with a clear message when allowance is missing", async function () {
+        const TokenVesting = await ethers.getContractFactory("TokenVesting");
+        const vestingWithoutApproval = await TokenVesting.deploy(
+            beneficiary.address,
+            await token.getAddress(),
+            start,
+            duration,
+            cliff,
+            allocation
+        );
+        await vestingWithoutApproval.waitForDeployment();
+
+        await expect(vestingWithoutApproval.fund()).to.be.revertedWith(
+            "insufficient token allowance"
+        );
+    });
+
     it("prevents claim before cliff", async function () {
         await vesting.fund();
         await expect(vesting.connect(beneficiary).claim()).to.be.revertedWith(
