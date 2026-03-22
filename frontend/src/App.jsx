@@ -65,6 +65,25 @@ function App() {
     }
   }
 
+  // TODO accept custom amounts to approve
+  async function handleApprove() {
+    try {
+      setStatus("waiting for approve confirmation");
+      const { token, vesting } = await getContracts();
+      const vestingAddress = await vesting.getAddress();
+      const allocation = await vesting.totalAllocation();
+      const tx = await token.approve(vestingAddress, allocation);
+
+      setStatus("approve transaction submitted");
+      await tx.wait();
+
+      await loadVestingContract();
+      setStatus("approve successful");
+    } catch (error) {
+      setStatus(error.message || "approve failed");
+    }
+  }
+
   return (
     <div className="app">
       <h1>vesting skeleton frontend</h1>
@@ -97,7 +116,7 @@ function App() {
       <section className="panel">
         <h2>actions</h2>
         <div className="actions">
-          <button>approve</button>
+          <button onClick={handleApprove}>approve</button>
           <button>fund</button>
           <button>claim all</button>
         </div>
