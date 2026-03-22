@@ -9,6 +9,7 @@ import {
 function App() {
   const [account, setAccount] = useState("");
   const [status, setStatus] = useState("not connected");
+  const [partialClaimAmount, setPartialClaimAmount] = useState("");
   const [owner, setOwner] = useState("-");
   const [beneficiary, setBeneficiary] = useState("-");
   const [funded, setFunded] = useState(false);
@@ -100,6 +101,40 @@ function App() {
     }
   }
 
+  // a lot of redundant setup code can be separated 
+  // TODO add possibility to manipulate time from UI to test this
+  async function handleClaimAll() {
+    try {
+      setStatus("waiting for claim confirmation");
+      const { vesting } = await getContracts();
+      const tx = await vesting.claim();
+
+      setStatus("claim transaction submitted");
+      await tx.wait();
+
+      await loadVestingContract();
+      setStatus("claim successful");
+    } catch (error) {
+      setStatus(error.message || "claim failed");
+    }
+  }
+
+  async function handlePartialClaim() {
+    try {
+      setStatus("waiting for partial claim confirmation");
+      const { vesting } = await getContracts();
+      const tx = await vesting.partialClaim(partialClaimAmount);
+
+      setStatus("partial claim transaction submitted");
+      await tx.wait();
+
+      await loadVestingContract();
+      setStatus("partial claim successful");
+    } catch (error) {
+      setStatus(error.message || "partial claim failed");
+    }
+  }
+
   return (
     <div className="app">
       <h1>vesting skeleton frontend</h1>
@@ -134,12 +169,17 @@ function App() {
         <div className="actions">
           <button onClick={handleApprove}>approve</button>
           <button onClick={handleFund}>fund</button>
-          <button>claim all</button>
+          <button onClick={handleClaimAll}>claim all</button>
         </div>
 
         <div className="actions">
-          <input type="number" placeholder="amount" />
-          <button>partial claim</button>
+          <input
+            type="number"
+            placeholder="amount"
+            value={partialClaimAmount}
+            onChange={(event) => setPartialClaimAmount(event.target.value)}
+          />
+          <button onClick={handlePartialClaim}>partial claim</button>
         </div>
       </section>
     </div>
