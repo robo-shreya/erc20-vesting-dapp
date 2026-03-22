@@ -1,16 +1,33 @@
+import { useState } from "react";
 import "./App.css";
+import { getWalletContext, requestAccounts } from "./contractHelper";
 
 function App() {
+  const [account, setAccount] = useState("");
+  const [status, setStatus] = useState("not connected");
+
+  async function handleConnectWallet() {
+    try {
+      await requestAccounts();
+      const { signer } = await getWalletContext();
+      const wallet = await signer.getAddress();
+      setAccount(wallet);
+      setStatus(wallet ? "connected" : "not connected");
+    } catch (error) {
+      setStatus(error.message || "connection failed");
+    }
+  }
+
   return (
     <div className="app">
       <h1>vesting skeleton frontend</h1>
 
       <section className="panel">
         <div className="row">
-          <button>connect wallet</button>
-          <span className="status">not connected</span>
+          <button onClick={handleConnectWallet}>connect wallet</button>
+          <span className="status">{status}</span>
         </div>
-        <p>account: -</p>
+        <p>account: {account || "-"}</p>
         <p>token: -</p>
         <p>vesting: -</p>
       </section>
