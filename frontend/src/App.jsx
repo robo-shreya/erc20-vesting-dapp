@@ -16,15 +16,26 @@ function App() {
   const [released, setReleased] = useState("0");
   const [vested, setVested] = useState("0");
   const [claimable, setClaimable] = useState("0");
+  const [yourBalance, setYourBalance] = useState("0");
+  const [beneficiaryBalance, setBeneficiaryBalance] = useState("0");
+  const [vestingBalance, setVestingBalance] = useState("0");
+  const [allowance, setAllowance] = useState("0");
 
   async function loadVestingContract() {
-    const { vesting } = await getContracts();
+    const { token, vesting, signer } = await getContracts();
+    const wallet = await signer.getAddress();
+    const beneficiaryAddress = await vesting.beneficiary();
+    const vestingAddress = await vesting.getAddress();
 
     setOwner(await vesting.owner());
-    setBeneficiary(await vesting.beneficiary());
+    setBeneficiary(beneficiaryAddress);
     setFunded(await vesting.funded());
     setTotalAllocation((await vesting.totalAllocation()).toString());
     setReleased((await vesting.released()).toString());
+    setYourBalance((await token.balanceOf(wallet)).toString());
+    setBeneficiaryBalance((await token.balanceOf(beneficiaryAddress)).toString());
+    setVestingBalance((await token.balanceOf(vestingAddress)).toString());
+    setAllowance((await token.allowance(wallet, vestingAddress)).toString());
 
     // to show default 0 value before cliff ends 
     try {
@@ -77,10 +88,10 @@ function App() {
         <p>vested: {vested}</p>
         <p>claimable: {claimable}</p>
         <p>released: {released}</p>
-        <p>your balance: 0</p>
-        <p>beneficiary balance: 0</p>
-        <p>vesting balance: 0</p>
-        <p>allowance: 0</p>
+        <p>your balance: {yourBalance}</p>
+        <p>beneficiary balance: {beneficiaryBalance}</p>
+        <p>vesting balance: {vestingBalance}</p>
+        <p>allowance: {allowance}</p>
       </section>
 
       <section className="panel">
