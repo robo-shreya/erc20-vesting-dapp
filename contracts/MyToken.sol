@@ -6,6 +6,8 @@ pragma solidity ^0.8.18;
 // 2. assign the initial supply to the owner
 // 3. support ERC-20 functions - approve, transfer and transferFrom
 
+// it acts like a ledger yo know how many tokens are owned by who
+
 contract MyToken {
     // constructor arguments
     uint256 public totalSupply;

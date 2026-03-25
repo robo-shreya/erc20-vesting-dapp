@@ -1,9 +1,69 @@
+:root {
+  font-family:
+    "Space Grotesk",
+    "Avenir Next",
+    "Segoe UI",
+    sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #25180d;
+  background:
+    radial-gradient(circle at top left, rgba(255, 215, 163, 0.55), transparent 30%),
+    radial-gradient(circle at top right, rgba(199, 118, 63, 0.2), transparent 28%),
+    linear-gradient(180deg, #f6e6d0 0%, #fcf7ef 46%, #fffdf9 100%);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  --panel-bg: rgba(255, 255, 255, 0.66);
+  --body-text: #25180d;
+  --muted-text: #6f5b49;
+  --accent-strong: #8a4c1d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
-  font-family: sans-serif;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(138, 76, 29, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(138, 76, 29, 0.04) 1px, transparent 1px);
+  background-size: 26px 26px;
+  mask-image: radial-gradient(circle at center, black 35%, transparent 88%);
+  pointer-events: none;
+}
+
+a {
+  color: inherit;
 }
 
 button,
 input {
   font: inherit;
+}
+
+code {
+  font-family:
+    "IBM Plex Mono",
+    "SFMono-Regular",
+    "SF Mono",
+    monospace;
+}
+
+#root {
+  isolation: isolate;
 }
