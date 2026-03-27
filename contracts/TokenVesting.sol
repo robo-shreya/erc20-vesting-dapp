@@ -64,14 +64,18 @@
             
             // transfer already allocated funds from owner to this contract
             require (totalAllocation > 0, "invalid allocation");
-            require(
-                token.allowance(msg.sender, address(this)) >= totalAllocation,
-                "insufficient token allowance"
-            );
+        require(
+            token.allowance(msg.sender, address(this)) >= totalAllocation,
+            "insufficient token allowance"
+        );
+        require(
+            token.balanceOf(msg.sender) >= totalAllocation,
+            "insufficient owner token balance"
+        );
 
-            bool success = token.transferFrom(
-                msg.sender, 
-                address(this), 
+        bool success = token.transferFrom(
+            msg.sender, 
+            address(this), 
                 totalAllocation
             );
 

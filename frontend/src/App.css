@@ -162,6 +162,8 @@
 
 .metric-card {
   min-height: 150px;
+  display: grid;
+  align-content: start;
 }
 
 .metric-label,
@@ -179,10 +181,13 @@
   margin: 0;
 }
 
-.metric-card h2 {
+.metric-value {
   margin-top: 12px;
-  font-size: clamp(1.5rem, 4vw, 2.4rem);
+  font-size: clamp(1.35rem, 3vw, 2.2rem);
   letter-spacing: -0.04em;
+  line-height: 1;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .metric-note {
@@ -268,6 +273,26 @@
   margin: 0;
   color: var(--muted-text);
   max-width: 62ch;
+}
+
+.debug-warning {
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border: 1px solid rgba(162, 98, 41, 0.18);
+  border-radius: 18px;
+  background: rgba(255, 243, 227, 0.9);
+  color: #7a4920;
+}
+
+.debug-events {
+  margin-top: 22px;
+  display: grid;
+  gap: 12px;
+}
+
+.debug-empty {
+  margin: 0;
+  color: var(--muted-text);
 }
 
 .partial-claim {
