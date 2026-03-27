@@ -1,6 +1,12 @@
 import { network } from "hardhat";
+import { writeFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const { ethers } = await network.connect();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // I haven't really called fund() and approve() here so that has to be done manually
 async function main() {
@@ -32,10 +38,22 @@ async function main() {
     ]);
     await vestingContract.waitForDeployment();
 
+    const tokenAddress = await tokenContract.getAddress();
+    const vestingAddress = await vestingContract.getAddress();
+    const frontendConfigPath = path.resolve(__dirname, "../frontend/src/config.js");
+
+    const configContents = 
+    `export const HARDHAT_CHAIN_ID = 31337n;
+    export const MY_TOKEN_ADDRESS = "${tokenAddress}";
+    export const TOKEN_VESTING_ADDRESS = "${vestingAddress}";`;
+
+    await writeFile(frontendConfigPath, configContents, "utf8");
+
     console.log("Deployer:", deployer.address);
     console.log("Beneficiary:", beneficiary.address);
-    console.log("MyToken:", await tokenContract.getAddress());
-    console.log("TokenVesting:", await vestingContract.getAddress());
+    console.log("MyToken:", tokenAddress);
+    console.log("TokenVesting:", vestingAddress);
+    console.log("Updated frontend config:", frontendConfigPath);
 }
 
 main().catch((error) => {

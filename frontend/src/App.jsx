@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./App.css";
 import {
   formatTokenAmount,
@@ -26,6 +26,19 @@ function formatTimestamp(timestamp) {
   return new Date(timestamp * 1000).toLocaleString();
 }
 
+function formatMetricValue(value) {
+  const numericValue = Number.parseFloat(value);
+
+  if (!Number.isFinite(numericValue)) {
+    return value;
+  }
+
+  return new Intl.NumberFormat(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 4,
+  }).format(numericValue);
+}
+
 function App() {
   const [account, setAccount] = useState("");
   const [status, setStatus] = useState("not connected");
@@ -46,28 +59,68 @@ function App() {
   const [cliffTimestamp, setCliffTimestamp] = useState(0);
   const [endTimestamp, setEndTimestamp] = useState(0);
   const [currentTimestamp, setCurrentTimestamp] = useState(0);
+  const [chainId, setChainId] = useState("");
+  const [blockNumber, setBlockNumber] = useState("");
+  const [rawStart, setRawStart] = useState("0");
+  const [rawCliffDuration, setRawCliffDuration] = useState("0");
+  const [rawDuration, setRawDuration] = useState("0");
+  const [resolvedVestingAddress, setResolvedVestingAddress] = useState("-");
+  const [providerLabel, setProviderLabel] = useState("MetaMask / injected provider");
+  const [consistencyWarning, setConsistencyWarning] = useState("");
+  const [genesisBlockHash, setGenesisBlockHash] = useState("-");
+  const [providerEvents, setProviderEvents] = useState([]);
+  const previousSnapshotRef = useRef(null);
+  const loadRequestIdRef = useRef(0);
 
-  async function loadBasicVestingState(
-    vesting,
-    tokenDecimals,
-    beneficiaryAddress,
-  ) {
-    setOwner(await vesting.owner());
-    setBeneficiary(beneficiaryAddress);
-    setFunded(await vesting.funded());
-    setTotalAllocation(
-      formatTokenAmount(await vesting.totalAllocation(), tokenDecimals),
-    );
-    setReleased(formatTokenAmount(await vesting.released(), tokenDecimals));
+  useEffect(() => {
+    if (!window.ethereum?.on) {
+      return undefined;
+    }
 
-    const start = Number(await vesting.start());
-    const cliffDuration = Number(await vesting.cliffDuration());
-    const duration = Number(await vesting.duration());
+    function pushProviderEvent(label, details) {
+      setProviderEvents((events) => [
+        {
+          id: `${Date.now()}-${label}`,
+          time: new Date().toLocaleTimeString(),
+          label,
+          details,
+        },
+        ...events,
+      ].slice(0, 8));
+    }
 
-    setStartTimestamp(start);
-    setCliffTimestamp(start + cliffDuration);
-    setEndTimestamp(start + duration);
-  }
+    function handleDisconnect(error) {
+      pushProviderEvent(
+        "disconnect",
+        error?.message || JSON.stringify(error) || "provider disconnected",
+      );
+    }
+
+    function handleAccountsChanged(accounts) {
+      pushProviderEvent(
+        "accountsChanged",
+        Array.isArray(accounts) ? accounts.join(", ") || "no accounts" : "unknown",
+      );
+    }
+
+    function handleChainChanged(nextChainId) {
+      pushProviderEvent("chainChanged", String(nextChainId));
+    }
+
+    window.ethereum.on("disconnect", handleDisconnect);
+    window.ethereum.on("accountsChanged", handleAccountsChanged);
+    window.ethereum.on("chainChanged", handleChainChanged);
+
+    return () => {
+      if (!window.ethereum?.removeListener) {
+        return;
+      }
+
+      window.ethereum.removeListener("disconnect", handleDisconnect);
+      window.ethereum.removeListener("accountsChanged", handleAccountsChanged);
+      window.ethereum.removeListener("chainChanged", handleChainChanged);
+    };
+  }, []);
 
   async function loadTokenState(
     token,
@@ -76,50 +129,165 @@ function App() {
     vestingAddress,
     tokenDecimals
   ) {
-    setYourBalance(formatTokenAmount(await token.balanceOf(wallet), tokenDecimals));
-    setBeneficiaryBalance(
-      formatTokenAmount(await token.balanceOf(beneficiaryAddress), tokenDecimals),
-    );
-    setVestingBalance(
-      formatTokenAmount(await token.balanceOf(vestingAddress), tokenDecimals),
-    );
-    setAllowance(
-      formatTokenAmount(await token.allowance(wallet, vestingAddress), tokenDecimals),
-    );
+    return {
+      yourBalance: formatTokenAmount(await token.balanceOf(wallet), tokenDecimals),
+      beneficiaryBalance: formatTokenAmount(
+        await token.balanceOf(beneficiaryAddress),
+        tokenDecimals,
+      ),
+      vestingBalance: formatTokenAmount(
+        await token.balanceOf(vestingAddress),
+        tokenDecimals,
+      ),
+      allowance: formatTokenAmount(
+        await token.allowance(wallet, vestingAddress),
+        tokenDecimals,
+      ),
+    };
   }
 
   async function loadClaimState(vesting, tokenDecimals) {
     try {
-      setVested(formatTokenAmount(await vesting.getVestedAmount(), tokenDecimals));
-      setClaimable(
-        formatTokenAmount(await vesting.getClaimableAmount(), tokenDecimals),
-      );
+      return {
+        vested: formatTokenAmount(await vesting.getVestedAmount(), tokenDecimals),
+        claimable: formatTokenAmount(await vesting.getClaimableAmount(), tokenDecimals),
+      };
     } catch {
-      setVested("cliff didn't end yet");
-      setClaimable("cliff didn't end yet");
+      return {
+        vested: "cliff didn't end yet",
+        claimable: "cliff didn't end yet",
+      };
     }
   }
 
   async function loadVestingContract() {
+    const requestId = loadRequestIdRef.current + 1;
+    loadRequestIdRef.current = requestId;
+
     const { token, vesting, signer, provider } = await getContracts();
     const wallet = await signer.getAddress();
     const tokenDecimals = Number(await token.decimals());
     const beneficiaryAddress = await vesting.beneficiary();
     const vestingAddress = await vesting.getAddress();
+    const tokenAddress = await token.getAddress();
     const latestBlock = await provider.getBlock("latest");
+    const genesisBlock = await provider.getBlock(0);
+    const network = await provider.getNetwork();
+    const ownerAddress = await vesting.owner();
+    const fundedState = await vesting.funded();
+    const startRaw = await vesting.start();
+    const cliffDurationRaw = await vesting.cliffDuration();
+    const durationRaw = await vesting.duration();
+    const totalAllocationRaw = await vesting.totalAllocation();
+    const releasedRaw = await vesting.released();
+    const providerDebugLabel =
+      window.ethereum?.isMetaMask
+        ? "MetaMask injected provider (RPC URL not exposed)"
+        : "Injected browser provider";
+    const start = Number(startRaw);
+    const cliffDuration = Number(cliffDurationRaw);
+    const duration = Number(durationRaw);
+    const nextSnapshot = {
+      chainId: String(network.chainId),
+      vestingAddress,
+      tokenAddress,
+      start: String(startRaw),
+      cliffDuration: String(cliffDurationRaw),
+      duration: String(durationRaw),
+      totalAllocation: String(totalAllocationRaw),
+      genesisBlockHash: genesisBlock?.hash || "-",
+    };
+    const previousSnapshot = previousSnapshotRef.current;
+
+    if (loadRequestIdRef.current !== requestId) {
+      return;
+    }
 
     setDecimals(tokenDecimals);
+    setAccount(wallet);
+    setChainId(String(network.chainId));
+    setBlockNumber(latestBlock ? String(latestBlock.number) : "-");
     setCurrentTimestamp(latestBlock ? Number(latestBlock.timestamp) : 0);
+    setGenesisBlockHash(genesisBlock?.hash || "-");
+    setResolvedVestingAddress(vestingAddress);
+    setProviderLabel(providerDebugLabel);
+    setOwner(ownerAddress);
+    setBeneficiary(beneficiaryAddress);
+    setFunded(fundedState);
+    setTotalAllocation(formatTokenAmount(totalAllocationRaw, tokenDecimals));
+    setReleased(formatTokenAmount(releasedRaw, tokenDecimals));
+    setStartTimestamp(start);
+    setCliffTimestamp(start + cliffDuration);
+    setEndTimestamp(start + duration);
+    setRawStart(String(startRaw));
+    setRawCliffDuration(String(cliffDurationRaw));
+    setRawDuration(String(durationRaw));
 
-    await loadBasicVestingState(vesting, tokenDecimals, beneficiaryAddress);
-    await loadTokenState(
+    if (previousSnapshot) {
+      const changedFields = [];
+
+      if (previousSnapshot.chainId !== nextSnapshot.chainId) {
+        changedFields.push("chain ID");
+      }
+
+      if (previousSnapshot.vestingAddress !== nextSnapshot.vestingAddress) {
+        changedFields.push("vesting address");
+      }
+
+      if (previousSnapshot.tokenAddress !== nextSnapshot.tokenAddress) {
+        changedFields.push("token address");
+      }
+
+      if (previousSnapshot.start !== nextSnapshot.start) {
+        changedFields.push("start");
+      }
+
+      if (previousSnapshot.cliffDuration !== nextSnapshot.cliffDuration) {
+        changedFields.push("cliff duration");
+      }
+
+      if (previousSnapshot.duration !== nextSnapshot.duration) {
+        changedFields.push("duration");
+      }
+
+      if (previousSnapshot.totalAllocation !== nextSnapshot.totalAllocation) {
+        changedFields.push("total allocation");
+      }
+
+      if (previousSnapshot.genesisBlockHash !== genesisBlock?.hash) {
+        changedFields.push("genesis block hash");
+      }
+
+      setConsistencyWarning(
+        changedFields.length > 0
+          ? `Inconsistent chain state across refreshes. Changed: ${changedFields.join(", ")}. This usually means the app is reading a different localhost chain session or a different deployment.`
+          : "",
+      );
+    } else {
+      setConsistencyWarning("");
+    }
+
+    previousSnapshotRef.current = nextSnapshot;
+
+    const tokenState = await loadTokenState(
       token,
       wallet,
       beneficiaryAddress,
       vestingAddress,
-      tokenDecimals
+      tokenDecimals,
     );
-    await loadClaimState(vesting, tokenDecimals);
+    const claimState = await loadClaimState(vesting, tokenDecimals);
+
+    if (loadRequestIdRef.current !== requestId) {
+      return;
+    }
+
+    setYourBalance(tokenState.yourBalance);
+    setBeneficiaryBalance(tokenState.beneficiaryBalance);
+    setVestingBalance(tokenState.vestingBalance);
+    setAllowance(tokenState.allowance);
+    setVested(claimState.vested);
+    setClaimable(claimState.claimable);
   }
 
   async function handleConnectWallet() {
@@ -293,6 +461,19 @@ function App() {
     { label: "Chain time", value: formatTimestamp(currentTimestamp) },
   ];
 
+  const debugValues = [
+    { label: "Active account", value: account || "-" },
+    { label: "Provider", value: providerLabel },
+    { label: "Chain ID", value: chainId || "-" },
+    { label: "Latest block", value: blockNumber || "-" },
+    { label: "Genesis block hash", value: genesisBlockHash },
+    { label: "Vesting contract", value: resolvedVestingAddress || TOKEN_VESTING_ADDRESS },
+    { label: "Raw start", value: rawStart },
+    { label: "Raw cliff duration", value: rawCliffDuration },
+    { label: "Raw duration", value: rawDuration },
+    { label: "Current block timestamp", value: String(currentTimestamp || "-") },
+  ];
+
   let actionHint = "Connect a wallet to interact with the contracts.";
 
   if (hasConnectedWallet && !isOwner && !isBeneficiary) {
@@ -342,7 +523,9 @@ function App() {
         {metrics.map((metric) => (
           <article className="metric-card panel" key={metric.label}>
             <p className="metric-label">{metric.label}</p>
-            <h2>{metric.value}</h2>
+            <h2 className="metric-value" title={metric.value}>
+              {formatMetricValue(metric.value)}
+            </h2>
             <p className="metric-note">{metric.note}</p>
           </article>
         ))}
@@ -531,6 +714,44 @@ function App() {
               Claim custom amount
             </button>
           </div>
+        </div>
+      </section>
+
+      <section className="panel detail-panel">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Debug</p>
+            <h2>Chain and contract state</h2>
+          </div>
+        </div>
+
+        {consistencyWarning ? (
+          <p className="debug-warning">{consistencyWarning}</p>
+        ) : null}
+
+        <div className="detail-list">
+          {debugValues.map((item) => (
+            <div className="detail-row" key={item.label}>
+              <span>{item.label}</span>
+              <code>{item.value}</code>
+            </div>
+          ))}
+        </div>
+
+        <div className="debug-events">
+          <p className="eyebrow">Provider events</p>
+          {providerEvents.length === 0 ? (
+            <p className="debug-empty">No provider events captured yet.</p>
+          ) : (
+            <div className="detail-list">
+              {providerEvents.map((event) => (
+                <div className="detail-row" key={event.id}>
+                  <span>{`${event.time} • ${event.label}`}</span>
+                  <code>{event.details}</code>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
     </div>
